@@ -1,9 +1,10 @@
-﻿@model $model$
+﻿
+@using (Html.BeginForm("PostVcards" , "Vcard", null, FormMethod.Post, new { enctype = "multipart/form-data" }))
+{ 
+    <input type="file" name="file"/>
 
-@{
-  ViewBag.Title = "$title$";
-  Layout = "$_Layout$";
+<button type="submit" class="btn btn-primary" > Submit </button>
+
+
+
 }
-
-<h2>$title$</h2>
-$END$

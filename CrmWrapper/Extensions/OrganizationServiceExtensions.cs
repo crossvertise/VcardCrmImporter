@@ -525,6 +525,11 @@
         {
             Guard.ArgumentNotNullOrEmpty(companyClassification, "companyClassification");
 
+            if (companyClassification == "Uncategorized")
+            {
+                return null;
+            }
+
             var productTypeNameCondition = ConditionExpressionHelper.CreateEqualsCondition("xv_name", companyClassification);
             var filter = new FilterExpression();
             filter.Conditions.Add(productTypeNameCondition);

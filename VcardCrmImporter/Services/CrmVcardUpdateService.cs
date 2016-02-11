@@ -1,12 +1,10 @@
 ﻿namespace VcardCrmImporter.Services
 {
     using System;
-    using System.Data.Entity;
-    using System.EnterpriseServices;
     using System.Linq;
+    using System.Reflection;
 
     using CrmOrganizationClasses;
-    using CrmWrapper;
 
     // These namespaces are found in the Microsoft.Xrm.Sdk.dll assembly
     // located in the SDK\bin folder of the SDK download.
@@ -24,68 +22,88 @@
     {
         public async System.Threading.Tasks.Task UpdateContactWithVcard(vCard vcard, string userEmail)
         {
-            var crmConnection = new CrmConnection(CloudConfigurationManager.GetSetting("CrmConnectionString"));
+            //Todo: add pre-checks
 
-            using (var serviceProxy = new OrganizationServiceProxy(crmConnection.ServiceUri, crmConnection.HomeRealmUri, crmConnection.ClientCredentials, null))
+            var crmConnection = CrmConnection.Parse(CloudConfigurationManager.GetSetting("CrmConnectionString"));
+            var serviceUri = new Uri(crmConnection.ServiceUri + "/XRMServices/2011/Organization.svc");
+
+            using (var service = new OrganizationServiceProxy(serviceUri, null, crmConnection.ClientCredentials, null))
             {
                 // This statement is required to enable early-bound type support.
-                serviceProxy.EnableProxyTypes();
+                service.EnableProxyTypes(Assembly.GetAssembly(typeof(SystemUser)));
 
 
-                var orgContext = new OrganizationServiceContext(serviceProxy);
+                var orgContext = new OrganizationServiceContext(service);
 
                 // Retrieve the system user ID of the user to impersonate.
-                var impersonatedUserId = await(from user in orgContext.CreateQuery<SystemUser>()
+                var impersonatedUser = (from user in orgContext.CreateQuery<SystemUser>()
                                           where user.InternalEMailAddress == userEmail 
-                                          select user.SystemUserId.Value).FirstOrDefaultAsync();
+                                          select user).FirstOrDefault();
 
                 // We impersonate the user that has sent the email
-                if (impersonatedUserId == new Guid())
+                if (impersonatedUser == null)
                 {
                     throw new Exception("User not found in CRM");
                 }
 
-                serviceProxy.CallerId = impersonatedUserId;
+                service.CallerId = impersonatedUser.Id;
 
+                // Search for the company (account) in the CRM
                 var companyNameShortend = CompanyNameHelper.RemoveCommonCompanySuffixes(vcard.Organization);
-                var account = await orgContext.CreateQuery<Account>().FirstOrDefaultAsync(a => a.Name.StartsWith(companyNameShortend));
+                var account = orgContext.CreateQuery<Account>().FirstOrDefault(a => a.Name.StartsWith(companyNameShortend));
+
                 if (account != null)
                 {
-                    this.UpdateAccountWithVcard(serviceProxy, account, vcard);
+                    // If it exists, update it
+                    this.UpdateAccountWithVcard(service, account, vcard);
+                    orgContext.UpdateObject(account);
                 }
                 else
                 {
-                    account = this.UpdateAccountWithVcard(serviceProxy, null, vcard);
-                    account.OwnerId.Id = impersonatedUserId;
-                    orgContext.Attach(account);
+                    // If it not yet exists, create it
+                    account = this.UpdateAccountWithVcard(service, null, vcard);
+                    account.OwnerId = new EntityReference(impersonatedUser.LogicalName, impersonatedUser.Id);
+                    orgContext.AddObject(account);
                 }
 
+                // Save the account, so it receices an ID
                 orgContext.SaveChanges();
 
+                Contact contact = null;
+
                 // Try to get the contact by Firstname, Lastname and Company name
-                var contact = await orgContext.CreateQuery<Contact>()
-                    .FirstOrDefaultAsync(c => c.FirstName == vcard.GivenName.Trim()
-                        && c.LastName == vcard.FamilyName.Trim()
-                        && c.ParentCustomerId.Name == vcard.Organization.Trim());
+                if (vcard.GivenName != null && vcard.FamilyName != null && vcard.Organization != null)
+                {
+                    contact = (from c in orgContext.CreateQuery<Contact>()
+                               where
+                                   c.FirstName == vcard.GivenName.Trim() && c.LastName == vcard.FamilyName.Trim()
+                                   && c.ParentCustomerId == new EntityReference(account.LogicalName, account.Id)
+                               select c).FirstOrDefault();
+                }
 
                 // Try to search contact by email
-                contact = contact ?? await orgContext.CreateQuery<Contact>().FirstOrDefaultAsync(c => c.EMailAddress1 == vcard.EmailAddresses[0].Address.Trim());
+                if (vcard.EmailAddresses.Any() && vcard.EmailAddresses[0].Address != null)
+                {
+                    contact = contact ?? orgContext.CreateQuery<Contact>().FirstOrDefault(c => c.EMailAddress1 == vcard.EmailAddresses[0].Address.Trim());
+                }
 
                 if (contact != null)
                 {
                     // If the contact is found, update it
-                    this.UpdateContactWithVcard(serviceProxy, contact, vcard);
-                    contact.AccountId.Id = account.Id;
+                    this.UpdateContactWithVcard(service, contact, vcard);
+                    contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
+                    orgContext.UpdateObject(contact);
                 }
                 else
                 {
                     // If the contact was not found, insert it
-                    contact = this.UpdateContactWithVcard(serviceProxy, null, vcard);
-                    contact.AccountId.Id = account.Id;
-                    contact.OwnerId.Id = impersonatedUserId;
-                    orgContext.Attach(contact);
+                    contact = this.UpdateContactWithVcard(service, null, vcard);
+                    contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
+                    contact.OwnerId = new EntityReference(impersonatedUser.LogicalName, impersonatedUser.Id);
+                    orgContext.AddObject(contact);
                 }
 
+                // Save the contact
                 orgContext.SaveChanges();
             }
         }
@@ -117,7 +135,7 @@
             contact.JobTitle = vcard.Role;
             contact.BirthDate = vcard.BirthDate;
             contact.xv_Salutation = vcard.Gender == vCardGender.Male ? new OptionSetValue(772600000) : (vcard.Gender == vCardGender.Female ? new OptionSetValue(772600001) : null);
-            contact.Description += vcard.Notes;
+            contact.Description += string.Join(" ", vcard.Notes.Select(n => n.Text));
 
             return contact;
         }
