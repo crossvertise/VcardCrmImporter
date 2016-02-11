@@ -58,6 +58,7 @@
 
         [HttpPost]
         [ValidateInput(false)]
+        [MandrillWebhook(KeyAppSetting = "MandrillWebhookKey")]
         public async Task<ActionResult> MailWebhook()
         {
             var mandrill = new Mandrill.MandrillApi(this.mandrillApiKey);
@@ -67,7 +68,16 @@
             {
                 string validJson = HttpContext.Request.Form["mandrill_events"].Replace("mandrill_events=", string.Empty);
 
+                if (string.IsNullOrWhiteSpace(validJson))
+                {
+                    return new HttpStatusCodeResult(400);
+                }
+
                 var webhookEvents = JsonConvert.DeserializeObject<List<WebHookEvent>>(validJson);
+                if (webhookEvents == null)
+                {
+                    return new HttpStatusCodeResult(400);
+                }
 
                 var results = new List<string>();
 
