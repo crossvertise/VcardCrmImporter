@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.30723.0
+VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VcardCrmImporter", "VcardCrmImporter\VcardCrmImporter.csproj", "{958F3C9A-C5BB-41B1-B904-B169F3858227}"
 EndProject
@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Configurations", "Configura
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrmWrapper", "CrmWrapper\CrmWrapper.csproj", "{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VcardCrmImporterTests", "VcardCrmImporterTests\VcardCrmImporterTests.csproj", "{4BD94FF6-45F1-41F2-8C27-8D68272AD486}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,6 +39,12 @@ Global
 		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.DebugLocal|Any CPU.Build.0 = DebugLocal|Any CPU
 		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.DebugLocal|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.DebugLocal|Any CPU.Build.0 = Debug|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

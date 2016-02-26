@@ -18,97 +18,136 @@
 
     using Thought.vCards;
 
-    public class CrmVcardUpdateService
+    public class CrmVcardUpdateService : IDisposable
     {
-        public async System.Threading.Tasks.Task UpdateContactWithVcard(vCard vcard, string userEmail)
-        {
-            //Todo: add pre-checks
+        private readonly OrganizationServiceProxy service;
 
+        private readonly OrganizationServiceContext orgContext;
+
+        private readonly SystemUser impersonatedUser;
+
+        public CrmVcardUpdateService(string userEmail)
+        {
+            // Establish CRM connection
             var crmConnection = CrmConnection.Parse(CloudConfigurationManager.GetSetting("CrmConnectionString"));
             var serviceUri = new Uri(crmConnection.ServiceUri + "/XRMServices/2011/Organization.svc");
+            this.service = new OrganizationServiceProxy(serviceUri, null, crmConnection.ClientCredentials, null);
 
-            using (var service = new OrganizationServiceProxy(serviceUri, null, crmConnection.ClientCredentials, null))
+            // This statement is required to enable early-bound type support.
+            this.service.EnableProxyTypes(Assembly.GetAssembly(typeof(SystemUser)));
+
+            // Create context
+            this.orgContext = new OrganizationServiceContext(this.service);
+
+            // Retrieve the system user ID of the user to impersonate.
+            this.impersonatedUser = (from user in this.orgContext.CreateQuery<SystemUser>() where user.InternalEMailAddress == userEmail select user).FirstOrDefault();
+
+            // We impersonate the user that has sent the email
+            if (this.impersonatedUser == null)
             {
-                // This statement is required to enable early-bound type support.
-                service.EnableProxyTypes(Assembly.GetAssembly(typeof(SystemUser)));
-
-
-                var orgContext = new OrganizationServiceContext(service);
-
-                // Retrieve the system user ID of the user to impersonate.
-                var impersonatedUser = (from user in orgContext.CreateQuery<SystemUser>()
-                                          where user.InternalEMailAddress == userEmail 
-                                          select user).FirstOrDefault();
-
-                // We impersonate the user that has sent the email
-                if (impersonatedUser == null)
-                {
-                    throw new Exception("User not found in CRM");
-                }
-
-                service.CallerId = impersonatedUser.Id;
-
-                // Search for the company (account) in the CRM
-                var companyNameShortend = CompanyNameHelper.RemoveCommonCompanySuffixes(vcard.Organization);
-                var account = orgContext.CreateQuery<Account>().FirstOrDefault(a => a.Name.StartsWith(companyNameShortend));
-
-                if (account != null)
-                {
-                    // If it exists, update it
-                    this.UpdateAccountWithVcard(service, account, vcard);
-                    orgContext.UpdateObject(account);
-                }
-                else
-                {
-                    // If it not yet exists, create it
-                    account = this.UpdateAccountWithVcard(service, null, vcard);
-                    account.OwnerId = new EntityReference(impersonatedUser.LogicalName, impersonatedUser.Id);
-                    orgContext.AddObject(account);
-                }
-
-                // Save the account, so it receices an ID
-                orgContext.SaveChanges();
-
-                Contact contact = null;
-
-                // Try to get the contact by Firstname, Lastname and Company name
-                if (vcard.GivenName != null && vcard.FamilyName != null && vcard.Organization != null)
-                {
-                    contact = (from c in orgContext.CreateQuery<Contact>()
-                               where
-                                   c.FirstName == vcard.GivenName.Trim() && c.LastName == vcard.FamilyName.Trim()
-                                   && c.ParentCustomerId == new EntityReference(account.LogicalName, account.Id)
-                               select c).FirstOrDefault();
-                }
-
-                // Try to search contact by email
-                if (vcard.EmailAddresses.Any() && vcard.EmailAddresses[0].Address != null)
-                {
-                    contact = contact ?? orgContext.CreateQuery<Contact>().FirstOrDefault(c => c.EMailAddress1 == vcard.EmailAddresses[0].Address.Trim());
-                }
-
-                if (contact != null)
-                {
-                    // If the contact is found, update it
-                    this.UpdateContactWithVcard(service, contact, vcard);
-                    contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
-                    orgContext.UpdateObject(contact);
-                }
-                else
-                {
-                    // If the contact was not found, insert it
-                    contact = this.UpdateContactWithVcard(service, null, vcard);
-                    contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
-                    contact.OwnerId = new EntityReference(impersonatedUser.LogicalName, impersonatedUser.Id);
-                    orgContext.AddObject(contact);
-                }
-
-                // Save the contact
-                orgContext.SaveChanges();
+                throw new Exception("User not found in CRM");
             }
+
+            this.service.CallerId = this.impersonatedUser.Id;
         }
 
-        private Contact UpdateContactWithVcard(IOrganizationService service, Contact contact, vCard vcard)
+        public string UpdateContactWithVcard(vCard vcard, string filename)
+        {
+            // pre-checks
+            if (string.IsNullOrWhiteSpace(vcard.FamilyName))
+            {
+                return string.Format("{0}: not imported - family name not provided", filename);
+            }
+
+            if (string.IsNullOrWhiteSpace(vcard.GivenName))
+            {
+                return string.Format("{0}: not imported - given name not provided", filename);
+            }
+
+            if (string.IsNullOrWhiteSpace(vcard.Organization))
+            {
+                return string.Format("{0}: not imported - company not provided", filename);
+            }
+
+            if (!vcard.EmailAddresses.Any())
+            {
+                return string.Format("{0}: not imported - email address not provided", filename);
+            }
+
+            string result;
+
+            // Search for the company (account) in the CRM
+            var companyNameShortend = CompanyNameHelper.RemoveCommonCompanySuffixes(vcard.Organization);
+            var account = this.orgContext.CreateQuery<Account>().FirstOrDefault(a => a.Name.StartsWith(companyNameShortend));
+
+            if (account != null)
+            {
+                // If it exists, update it
+                this.UpdateAccountWithVcard(account, vcard);
+                this.orgContext.UpdateObject(account);
+                result = "Existing account updated";
+            }
+            else
+            {
+                // If it not yet exists, create it
+                account = this.UpdateAccountWithVcard(null, vcard);
+                account.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
+                this.orgContext.AddObject(account);
+                result = "New account created";
+            }
+
+            // Save the account, so it receices an ID
+            this.orgContext.SaveChanges();
+
+            Contact contact = null;
+
+            // Try to get the contact by Firstname, Lastname and Company name
+            if (vcard.GivenName != null && vcard.FamilyName != null && vcard.Organization != null)
+            {
+                contact = (from c in this.orgContext.CreateQuery<Contact>()
+                            where
+                                c.FirstName == vcard.GivenName.Trim() && c.LastName == vcard.FamilyName.Trim()
+                                && c.ParentCustomerId == new EntityReference(account.LogicalName, account.Id)
+                            select c).FirstOrDefault();
+            }
+
+            // Try to search contact by email
+            if (vcard.EmailAddresses.Any() && vcard.EmailAddresses[0].Address != null)
+            {
+                contact = contact ?? this.orgContext.CreateQuery<Contact>().FirstOrDefault(c => c.EMailAddress1 == vcard.EmailAddresses[0].Address.Trim());
+            }
+
+            if (contact != null)
+            {
+                // If the contact is found, update it
+                this.UpdateContactWithVcard(contact, vcard);
+                contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
+                this.orgContext.UpdateObject(contact);
+                result += ", Existing contact updated";
+            }
+            else
+            {
+                // If the contact was not found, insert it
+                contact = this.UpdateContactWithVcard(null, vcard);
+                contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
+                contact.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
+                this.orgContext.AddObject(contact);
+                result += ", New contact created";
+            }
+
+            // Save the contact
+            this.orgContext.SaveChanges();
+
+            return filename + ": " + result;
+        }
+
+        public void Dispose()
+        {
+            this.orgContext.Dispose();
+            this.service.Dispose();
+        }
+
+        private Contact UpdateContactWithVcard(Contact contact, vCard vcard)
         {
             if (contact == null)
             {
@@ -129,7 +168,7 @@
             contact.Address1_StateOrProvince = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.Region).FirstOrDefault();
             contact.Address1_Country = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.Country).FirstOrDefault();
             contact.Address1_PostalCode = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.PostalCode).FirstOrDefault();
-            contact.xv_Land = contact.Address1_Country != null ? service.GetCountryReferenceByName(contact.Address1_Country) : null;
+            contact.xv_Land = contact.Address1_Country != null ? this.service.GetCountryReferenceByName(contact.Address1_Country) : null;
 
             contact.Department = vcard.Department;
             contact.JobTitle = vcard.Role;
@@ -140,7 +179,7 @@
             return contact;
         }
 
-        private Account UpdateAccountWithVcard(IOrganizationService service, Account account, vCard vcard)
+        private Account UpdateAccountWithVcard(Account account, vCard vcard)
         {
             if (account == null)
             {
@@ -155,9 +194,9 @@
             account.Address1_StateOrProvince = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.Region).FirstOrDefault();
             account.Address1_Country = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.Country).FirstOrDefault();
             account.Address1_PostalCode = vcard.DeliveryAddresses.Where(a => a.IsWork).Select(a => a.PostalCode).FirstOrDefault();
-            account.xv_Land = account.Address1_Country != null ? service.GetCountryReferenceByName(account.Address1_Country) : null;
+            account.xv_Land = account.Address1_Country != null ? this.service.GetCountryReferenceByName(account.Address1_Country) : null;
 
-            account.xv_Firmenklassifizierung = vcard.Categories.Count > 0 ? service.GetCompanyClassificationReferenceByName(vcard.Categories[0]) : null;
+            account.xv_Firmenklassifizierung = vcard.Categories.Count > 0 ? this.service.GetCompanyClassificationReferenceByName(vcard.Categories[0]) : null;
 
             return account;
         }

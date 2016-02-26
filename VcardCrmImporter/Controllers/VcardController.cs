@@ -5,6 +5,7 @@
     using System.IO;
     using System.Linq;
     using System.Text;
+    using System.Text.RegularExpressions;
     using System.Threading.Tasks;
     using System.Web;
     using System.Web.Mvc;
@@ -22,39 +23,28 @@
 
     public class VcardController : Controller
     {
-        private string mandrillApiKey = CloudConfigurationManager.GetSetting("CrmConnectionString");
+        private string mandrillApiKey = CloudConfigurationManager.GetSetting("MandrillApiKey");
 
         private string errorEmailRecipient = CloudConfigurationManager.GetSetting("ErrorEmailRecipient");
 
         private string emailSendingAddress = CloudConfigurationManager.GetSetting("EmailSendingAddress");
 
-        // GET: Vcard
-        [HttpGet]
-        public ActionResult PostVcards()
+        public async Task<ActionResult> MailTest()
         {
-            return this.View();
+            var mandrill = new Mandrill.MandrillApi(this.mandrillApiKey);
+            var email = new EmailMessage
+            {
+                FromEmail = this.emailSendingAddress,
+                To = new List<EmailAddress> { new EmailAddress(this.errorEmailRecipient) },
+                Subject = "VCard import finished",
+                Text = "sdfsdf",
+            };
+
+            await mandrill.SendMessage(new SendMessageRequest(email));
+
+            return new HttpStatusCodeResult(200);
         }
 
-        [HttpPost]
-        public async Task<ActionResult> PostVcards(HttpPostedFileBase file)
-        {
-            if (file == null)
-            {
-                ModelState.AddModelError("file", "An image file must be chosen.");
-                return this.View();
-            }
-            
-            var vcardReader = new Thought.vCards.vCardStandardReader();
-            using (var streamreader = new StreamReader(file.InputStream))
-            {
-                var vcard = vcardReader.Read(streamreader);
-                var service = new CrmVcardUpdateService();
-                await service.UpdateContactWithVcard(vcard, "m.balbach@crossvertise.com");
-            }
-            
-
-            return this.View("Success");
-        }
 
         [HttpPost]
         [ValidateInput(false)]
@@ -86,25 +76,26 @@
                     sender = webhookEvent.Msg.Sender;
                     var attachments = webhookEvent.Msg.Attachments;
 
+                    var service = new CrmVcardUpdateService(sender);
+
                     foreach (var attachment in attachments)
                     {
-                        if ((attachment.Value.Type != "text/vcard" && attachment.Value.Type != "text/x-vcard") || !attachment.Key.EndsWith(".vcf"))
+                        var filename = this.DecodeBase64Names(attachment.Key);
+
+                        if ((attachment.Value.Type != "text/vcard" && attachment.Value.Type != "text/x-vcard") || !filename.EndsWith(".vcf"))
                         {
-                            results.Add(attachment.Key + " (mime-type: " + attachment.Value.Type + "): not imported");
+                            results.Add(string.Format("{0}: not imported (mime-type: {1})", filename, attachment.Value.Type));
                             continue;
                         }
 
                         var bytes = attachment.Value.Base64 ? Convert.FromBase64String(attachment.Value.Content) : Encoding.UTF8.GetBytes(attachment.Value.Content);
                         var memoryStream = new MemoryStream(bytes);
-
                         var vcardReader = new vCardStandardReader();
                         using (var streamreader = new StreamReader(memoryStream))
                         {
                             var vcard = vcardReader.Read(streamreader);
-                            var service = new CrmVcardUpdateService();
-                            await service.UpdateContactWithVcard(vcard, sender);
-
-                            results.Add(string.Format("Processed {0} successfully", attachment.Key));
+                            var result = service.UpdateContactWithVcard(vcard, filename);
+                            results.Add(result);
                         }
                     }
                 }
@@ -113,8 +104,8 @@
                 {
                     FromEmail = this.emailSendingAddress,
                     To = new List<EmailAddress> { new EmailAddress(sender ?? this.errorEmailRecipient) },
-                    Subject = "VCard import completed",
-                    Text = string.Format("{0} files processed, {1} contacts imported \r\n", results.Count, results.Count(r => r.Contains("successfully"))) + string.Join("\n", results),
+                    Subject = "VCard import finished",
+                    Text = "Results:\r\n\r\n" + string.Join("\r\n", results),
                 };
 
                 await mandrill.SendMessage(new SendMessageRequest(email));
@@ -128,13 +119,25 @@
                                     FromEmail = this.emailSendingAddress,
                                     To = new List<EmailAddress> { new EmailAddress(sender ?? this.errorEmailRecipient) },
                                     Subject = "Error in VCard Import",
-                                    Text = JsonConvert.SerializeObject(ex)
+                                    Text = JsonConvert.SerializeObject(ex, Formatting.Indented)
                                 };
 
                 mandrill.SendMessage(new SendMessageRequest(email));
 
                 throw;
             }
+        }
+
+        private string DecodeBase64Names(string input)
+        {
+            var match = Regex.Match(input, @"^=\?utf-8\?B\?(?<base64>.+)\?=$");
+            if (match.Success)
+            {
+                byte[] data = Convert.FromBase64String(match.Groups["base64"].Value);
+                return Encoding.UTF8.GetString(data);
+            }
+
+            return input;
         }
     }
 }
