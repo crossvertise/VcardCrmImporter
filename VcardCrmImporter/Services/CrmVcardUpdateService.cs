@@ -28,6 +28,11 @@
 
         public CrmVcardUpdateService(string userEmail)
         {
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                throw new ArgumentException("userEmail must be a valid email address", "userEmail");
+            }
+
             // Establish CRM connection
             var crmConnection = CrmConnection.Parse(CloudConfigurationManager.GetSetting("CrmConnectionString"));
             var serviceUri = new Uri(crmConnection.ServiceUri + "/XRMServices/2011/Organization.svc");

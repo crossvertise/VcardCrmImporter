@@ -51,11 +51,13 @@
         [MandrillWebhook(KeyAppSetting = "MandrillWebhookKey")]
         public async Task<ActionResult> MailWebhook()
         {
+            // Initialize a mandrill client for sending emails
             var mandrill = new Mandrill.MandrillApi(this.mandrillApiKey);
             string sender = null;
 
             try
             {
+                // Get the JSON payload
                 string validJson = HttpContext.Request.Form["mandrill_events"].Replace("mandrill_events=", string.Empty);
 
                 if (string.IsNullOrWhiteSpace(validJson))
@@ -73,39 +75,52 @@
 
                 foreach (var webhookEvent in webhookEvents)
                 {
-                    sender = webhookEvent.Msg.Sender;
+                    sender = webhookEvent.Msg.FromEmail;
                     var attachments = webhookEvent.Msg.Attachments;
 
-                    var service = new CrmVcardUpdateService(sender);
-
-                    foreach (var attachment in attachments)
+                    // Verify the security by checking authorized senders
+                    if (webhookEvent.Msg.Spf.Result != "pass" && webhookEvent.Msg.Dkim.Valid != true)
                     {
-                        var filename = this.DecodeBase64Names(attachment.Key);
+                        throw new Exception("Sender not authorized: SPF / DKIM Check failed.");
+                    }
 
-                        if ((attachment.Value.Type != "text/vcard" && attachment.Value.Type != "text/x-vcard") || !filename.EndsWith(".vcf"))
+                    // Create an instance of the CRM service that acts in the name of the sender of the email
+                    using (var service = new CrmVcardUpdateService(sender))
+                    {
+                        // Loop through the attachments
+                        foreach (var attachment in attachments)
                         {
-                            results.Add(string.Format("{0}: not imported (mime-type: {1})", filename, attachment.Value.Type));
-                            continue;
-                        }
+                            // Get the VCards
+                            var filename = this.DecodeBase64Names(attachment.Key);
 
-                        var bytes = attachment.Value.Base64 ? Convert.FromBase64String(attachment.Value.Content) : Encoding.UTF8.GetBytes(attachment.Value.Content);
-                        var memoryStream = new MemoryStream(bytes);
-                        var vcardReader = new vCardStandardReader();
-                        using (var streamreader = new StreamReader(memoryStream))
-                        {
-                            var vcard = vcardReader.Read(streamreader);
-                            var result = service.UpdateContactWithVcard(vcard, filename);
-                            results.Add(result);
+                            if ((attachment.Value.Type != "text/vcard" && attachment.Value.Type != "text/x-vcard") || !filename.EndsWith(".vcf"))
+                            {
+                                results.Add(string.Format("{0}: not imported (mime-type: {1})", filename, attachment.Value.Type));
+                                continue;
+                            }
+
+                            var bytes = attachment.Value.Base64 ? Convert.FromBase64String(attachment.Value.Content) : Encoding.UTF8.GetBytes(attachment.Value.Content);
+                            var memoryStream = new MemoryStream(bytes);
+                            var vcardReader = new vCardStandardReader();
+                            using (var streamreader = new StreamReader(memoryStream))
+                            {
+                                var vcard = vcardReader.Read(streamreader);
+
+                                // Import the VCards into the CRM
+                                var result = service.UpdateContactWithVcard(vcard, filename);
+                                results.Add(result);
+                            }
                         }
                     }
                 }
 
+                // Sends a mail with the results
                 var email = new EmailMessage
                 {
                     FromEmail = this.emailSendingAddress,
                     To = new List<EmailAddress> { new EmailAddress(sender ?? this.errorEmailRecipient) },
                     Subject = "VCard import finished",
-                    Text = "Results:\r\n\r\n" + string.Join("\r\n", results),
+                    Text = "Results:\t\n\t\n" + string.Join("\t\n", results),
                 };
 
                 await mandrill.SendMessage(new SendMessageRequest(email));
@@ -114,6 +129,7 @@
             }
             catch (Exception ex)
             {
+                // Send a mail with the error
                 var email = new EmailMessage
                                 {
                                     FromEmail = this.emailSendingAddress,
