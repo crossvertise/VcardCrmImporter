@@ -1,7 +1,7 @@
 ﻿using Microsoft.Owin;
 using Owin;
 
-[assembly: OwinStartupAttribute(typeof(VcardCrmImporter.Startup))]
+[assembly: OwinStartup(typeof(VcardCrmImporter.Startup))]
 namespace VcardCrmImporter
 {
     public partial class Startup

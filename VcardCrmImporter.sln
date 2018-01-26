@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.40629.0
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.2020
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VcardCrmImporter", "VcardCrmImporter\VcardCrmImporter.csproj", "{958F3C9A-C5BB-41B1-B904-B169F3858227}"
 EndProject
@@ -15,8 +15,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Configurations", "Configura
 	ProjectSection(SolutionItems) = preProject
 		PublishScripts\Configurations\VcardCrmImporter-WAWS-dev.json = PublishScripts\Configurations\VcardCrmImporter-WAWS-dev.json
 	EndProjectSection
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrmWrapper", "CrmWrapper\CrmWrapper.csproj", "{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VcardCrmImporterTests", "VcardCrmImporterTests\VcardCrmImporterTests.csproj", "{4BD94FF6-45F1-41F2-8C27-8D68272AD486}"
 EndProject
@@ -33,12 +31,6 @@ Global
 		{958F3C9A-C5BB-41B1-B904-B169F3858227}.DebugLocal|Any CPU.Build.0 = Debug|Any CPU
 		{958F3C9A-C5BB-41B1-B904-B169F3858227}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{958F3C9A-C5BB-41B1-B904-B169F3858227}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.DebugLocal|Any CPU.ActiveCfg = DebugLocal|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.DebugLocal|Any CPU.Build.0 = DebugLocal|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C6C1CC0F-D44D-4EF6-BDCD-D9BD43075018}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4BD94FF6-45F1-41F2-8C27-8D68272AD486}.DebugLocal|Any CPU.ActiveCfg = Debug|Any CPU
@@ -51,5 +43,8 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{4559C138-F7A3-482A-8A72-1C63394CB9E8} = {A153F479-5571-45F7-A5C1-B60A134E75F9}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {68CCCCAF-8C35-41EC-9518-7B6A1B20C45E}
 	EndGlobalSection
 EndGlobal

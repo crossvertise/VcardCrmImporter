@@ -138,7 +138,7 @@
                                     Text = JsonConvert.SerializeObject(ex, Formatting.Indented)
                                 };
 
-                mandrill.SendMessage(new SendMessageRequest(email));
+                await mandrill.SendMessage(new SendMessageRequest(email));
 
                 throw;
             }

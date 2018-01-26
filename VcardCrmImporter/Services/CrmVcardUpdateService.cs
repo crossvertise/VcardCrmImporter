@@ -1,4 +1,9 @@
-﻿namespace VcardCrmImporter.Services
+﻿using System.ServiceModel.Description;
+using CrmIntegration.DirectService;
+using CrmIntegration.DirectService.Extensions;
+using CrmIntegration.DirectService.Helpers;
+
+namespace VcardCrmImporter.Services
 {
     using System;
     using System.Linq;
@@ -8,11 +13,8 @@
 
     // These namespaces are found in the Microsoft.Xrm.Sdk.dll assembly
     // located in the SDK\bin folder of the SDK download.
-    using CrmWrapper.Extensions;
-    using CrmWrapper.Helpers;
 
     using Microsoft.Azure;
-    using Microsoft.Xrm.Client;
     using Microsoft.Xrm.Sdk;
     using Microsoft.Xrm.Sdk.Client;
 
@@ -30,13 +32,13 @@
         {
             if (string.IsNullOrWhiteSpace(userEmail))
             {
-                throw new ArgumentException("userEmail must be a valid email address", "userEmail");
+                throw new ArgumentException("userEmail must be a valid email address", nameof(userEmail));
             }
 
             // Establish CRM connection
-            var crmConnection = CrmConnection.Parse(CloudConfigurationManager.GetSetting("CrmConnectionString"));
-            var serviceUri = new Uri(crmConnection.ServiceUri + "/XRMServices/2011/Organization.svc");
-            this.service = new OrganizationServiceProxy(serviceUri, null, crmConnection.ClientCredentials, null);
+            var connectionString = CloudConfigurationManager.GetSetting("CrmConnectionString");
+            var crmServiceAdapter = new XvCrmServiceAdapter(connectionString);
+            this.service = (OrganizationServiceProxy)crmServiceAdapter.OrganizationService;
 
             // This statement is required to enable early-bound type support.
             this.service.EnableProxyTypes(Assembly.GetAssembly(typeof(SystemUser)));
@@ -90,7 +92,7 @@
                 // If it exists, update it
                 this.UpdateAccountWithVcard(account, vcard);
                 this.orgContext.UpdateObject(account);
-                result = "Existing account updated";
+                result = $"Existing <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=1&id=%7b{account.AccountId}%7d&pagetype=entityrecord\">account</a> updated";
             }
             else
             {
@@ -98,7 +100,7 @@
                 account = this.UpdateAccountWithVcard(null, vcard);
                 account.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
                 this.orgContext.AddObject(account);
-                result = "New account created";
+                result = $"New <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=1&id=%7b{account.AccountId}%7d&pagetype=entityrecord\">account</a> created";
             }
 
             // Save the account, so it receices an ID
@@ -112,7 +114,7 @@
                 contact = (from c in this.orgContext.CreateQuery<Contact>()
                             where
                                 c.FirstName == vcard.GivenName.Trim() && c.LastName == vcard.FamilyName.Trim()
-                                && c.ParentCustomerId == new EntityReference(account.LogicalName, account.Id)
+                                && c.ParentCustomerId.Id == account.Id
                             select c).FirstOrDefault();
             }
 
@@ -128,7 +130,7 @@
                 this.UpdateContactWithVcard(contact, vcard);
                 contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
                 this.orgContext.UpdateObject(contact);
-                result += ", Existing contact updated";
+                result += $", Existing <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=2&id=%7b{contact.ContactId}%7d&pagetype=entityrecord\">contact</a> updated";
             }
             else
             {
@@ -137,7 +139,7 @@
                 contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
                 contact.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
                 this.orgContext.AddObject(contact);
-                result += ", New contact created";
+                result += $", New <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=2&id=%7b{contact.ContactId}%7d&pagetype=entityrecord\">contact</a> created";
             }
 
             // Save the contact
