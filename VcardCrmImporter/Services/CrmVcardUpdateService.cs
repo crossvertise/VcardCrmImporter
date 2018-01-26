@@ -92,6 +92,10 @@ namespace VcardCrmImporter.Services
                 // If it exists, update it
                 this.UpdateAccountWithVcard(account, vcard);
                 this.orgContext.UpdateObject(account);
+
+                // Save the account, so it receices an ID
+                this.orgContext.SaveChanges();
+
                 result = $"Existing <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=1&id=%7b{account.AccountId}%7d&pagetype=entityrecord\">account</a> updated";
             }
             else
@@ -100,11 +104,14 @@ namespace VcardCrmImporter.Services
                 account = this.UpdateAccountWithVcard(null, vcard);
                 account.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
                 this.orgContext.AddObject(account);
+
+                // Save the account, so it receices an ID
+                this.orgContext.SaveChanges();
+
                 result = $"New <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=1&id=%7b{account.AccountId}%7d&pagetype=entityrecord\">account</a> created";
             }
 
-            // Save the account, so it receices an ID
-            this.orgContext.SaveChanges();
+            
 
             Contact contact = null;
 
@@ -130,6 +137,10 @@ namespace VcardCrmImporter.Services
                 this.UpdateContactWithVcard(contact, vcard);
                 contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
                 this.orgContext.UpdateObject(contact);
+
+                // Save the account, so it receices an ID
+                this.orgContext.SaveChanges();
+
                 result += $", Existing <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=2&id=%7b{contact.ContactId}%7d&pagetype=entityrecord\">contact</a> updated";
             }
             else
@@ -139,11 +150,12 @@ namespace VcardCrmImporter.Services
                 contact.ParentCustomerId = new EntityReference(account.LogicalName, account.Id);
                 contact.OwnerId = new EntityReference(this.impersonatedUser.LogicalName, this.impersonatedUser.Id);
                 this.orgContext.AddObject(contact);
+
+                // Save the account, so it receices an ID
+                this.orgContext.SaveChanges();
+
                 result += $", New <a href=\"https://crossvertise.corp.crossvertise.com/main.aspx?etc=2&id=%7b{contact.ContactId}%7d&pagetype=entityrecord\">contact</a> created";
             }
-
-            // Save the contact
-            this.orgContext.SaveChanges();
 
             return filename + ": " + result;
         }

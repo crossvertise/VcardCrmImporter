@@ -121,6 +121,7 @@
                     To = new List<EmailAddress> { new EmailAddress(sender ?? this.errorEmailRecipient) },
                     Subject = "VCard import finished",
                     Text = "Results:\t\n\t\n" + string.Join("\t\n", results),
+                    Html = "Results:<br/>\t\n <br/>\t\n" + string.Join("<br/>\t\n", results),
                 };
 
                 await mandrill.SendMessage(new SendMessageRequest(email));
