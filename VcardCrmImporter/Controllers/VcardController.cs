@@ -141,7 +141,8 @@
 
                 await mandrill.SendMessage(new SendMessageRequest(email));
 
-                throw;
+                //throw;
+                return new HttpStatusCodeResult(200);
             }
         }
 
